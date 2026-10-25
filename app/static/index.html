@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PreVisit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header><div class="in"><h1><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>PreVisit</h1><small id="modelinfo"></small></div></header>
+<div class="demo" id="demo">Demo with synthetic data only. Please do not upload real health information. Demo data is deleted automatically.</div>
+
+<main>
+  <!-- landing -->
+  <section id="landing" class="card hero hidden">
+    <div>
+      <span class="eyebrow">Powered by NVIDIA Nemotron on Nebius</span>
+      <h2>Fill your history once. <em>Share only what you choose.</em></h2>
+      <p class="sub">Photograph a paper report, let AI turn it into a clean summary, review it, and send your doctor an expiring link before you arrive. You can see every time it is opened and revoke it any time.</p>
+      <div class="row">
+        <button class="btn" id="startSample">Try with a sample patient</button>
+        <button class="btn ghost" id="startEmpty">Start with an empty profile</button>
+      </div>
+    </div>
+    <div class="preview" aria-hidden="true">
+      <span class="badge-exp">Expires in 4h</span>
+      <div class="pv-card">
+        <div class="pv-top"><span class="avatar">AV</span><div><b>Asha V.</b><span>Shared with Dr Rao · Riverside Clinic</span></div></div>
+        <div class="pv-label">Allergies</div>
+        <div class="chips"><span class="chip red">Penicillin · rash</span></div>
+        <div class="pv-label">Medications</div>
+        <div class="chips"><span class="chip">Metformin 500 mg</span><span class="chip">Lisinopril 10 mg</span></div>
+        <div class="pv-label">Latest labs</div>
+        <div class="pv-lab"><span>HbA1c</span><span>8.1 % <em>HIGH</em></span></div>
+        <div class="pv-lab"><span>Fasting glucose</span><span>148 mg/dL <em>HIGH</em></span></div>
+      </div>
+      <div class="toast"><i></i>Dr Rao opened your record · 2 min ago</div>
+    </div>
+    <div class="steps">
+      <div class="step"><b>01</b><strong>Profile</strong><span>Allergies, medicines and history, written once.</span></div>
+      <div class="step"><b>02</b><strong>Read reports</strong><span>AI turns a photo into fields you check.</span></div>
+      <div class="step"><b>03</b><strong>Share a link</strong><span>Pick sections and an expiry. No doctor account.</span></div>
+      <div class="step"><b>04</b><strong>Stay in control</strong><span>See every view and revoke at any time.</span></div>
+    </div>
+  </section>
+
+  <!-- app -->
+  <section id="app" class="hidden">
+    <div class="hello">
+      <div><h2 id="helloName">Welcome</h2><p class="sub" id="helloSub"></p></div>
+      <ol class="progress" id="progress"></ol>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-tab="profile" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>My profile</button>
+      <button data-tab="reports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>My reports<span class="count hidden" id="draftCount"></span></button>
+      <button data-tab="share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>Share with a doctor</button>
+      <button data-tab="log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Who looked</button>
+    </nav>
+
+    <div id="tab-profile" class="card">
+      <h2>My profile</h2>
+      <p class="sub">Written once, reused at every visit. Nothing is shared until you choose it on the Share tab.</p>
+      <div class="sect">About you</div>
+      <div class="grid2">
+        <div><label>Name</label><input type="text" id="p_name"></div>
+        <div><label>Date of birth</label><input type="date" id="p_dob"></div>
+      </div>
+      <label>Why are you visiting? <span class="hint">(today's concern)</span></label>
+      <textarea id="p_concern"></textarea>
+      <div id="emergency" class="alert bad hidden"></div>
+      <div class="sect">Health history</div>
+      <div class="grid2">
+        <div><label>Allergies <span class="hint">one per line</span></label><textarea id="p_allergies"></textarea></div>
+        <div><label>Current medications <span class="hint">one per line</span></label><textarea id="p_meds"></textarea></div>
+        <div><label>Conditions / past history <span class="hint">one per line</span></label><textarea id="p_conditions"></textarea></div>
+        <div><label>Private notes <span class="hint">never shared unless you tick it</span></label><textarea id="p_notes"></textarea></div>
+      </div>
+      <div class="row" style="margin-top:14px"><button class="btn" id="saveProfile">Save profile</button><span id="saved" class="hint"></span></div>
+    </div>
+
+    <div id="tab-reports" class="card hidden">
+      <h2>My reports</h2>
+      <p class="sub">Upload a photo or PDF. Nemotron on Nebius Token Factory reads it. You check it against the original before it is saved.</p>
+      <label class="drop" id="drop">
+        <input type="file" id="file" accept="image/png,image/jpeg,image/webp,application/pdf,text/plain">
+        <span class="drop-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg></span>
+        <b id="dropName">Drop a photo or PDF of a report here</b>
+        <span class="hint">or click to browse · PNG, JPG, WEBP, PDF or TXT · up to 6 MB</span>
+      </label>
+      <div class="row" style="margin-top:12px"><button class="btn" id="upload">Read this report</button></div>
+      <div class="row" style="margin-top:10px">
+        <span class="hint">No file handy? Try a sample:</span>
+        <span id="samples" class="row"></span>
+      </div>
+      <details style="margin-top:10px"><summary class="hint">Or paste report text</summary>
+        <textarea id="pasted" placeholder="Paste the text of a report (synthetic data only)"></textarea>
+        <button class="btn ghost" id="pasteBtn" style="margin-top:6px">Read pasted text</button>
+      </details>
+      <div id="reportMsg"></div>
+      <div id="reportList"></div>
+    </div>
+
+    <div id="tab-share" class="card hidden">
+      <h2>Share with a doctor</h2>
+      <p class="sub">The doctor gets a link, not an account. It expires, and you can switch it off at any time.</p>
+      <label>Doctor or clinic name</label><input type="text" id="s_doctor" placeholder="Dr. Rao, Riverside Clinic">
+      <label>What to share</label>
+      <div id="s_sections"></div>
+      <div id="s_reports" class="hidden"><label>Which reports <span class="hint">(confirmed only)</span></label><div id="s_reportlist"></div></div>
+      <label>Link works for</label>
+      <select id="s_expiry">
+        <option value="60">1 hour</option><option value="240" selected>4 hours</option>
+        <option value="1440">1 day</option><option value="10080">7 days</option>
+      </select>
+      <div class="row" style="margin-top:14px"><button class="btn" id="makeShare">Create share link</button></div>
+      <div id="shareMsg"></div>
+      <h3>Your links</h3>
+      <div id="shareList"></div>
+    </div>
+
+    <div id="tab-log" class="card hidden">
+      <h2>Who looked</h2>
+      <p class="sub">Every time a doctor opens your shared record or an original report, it is written here.</p>
+      <div id="logList"></div>
+    </div>
+  </section>
+</main>
+<footer>PreVisit · a hackathon demo, not a medical device · reads reports with NVIDIA Nemotron on Nebius Token Factory</footer>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let TOKEN = null; try { TOKEN = localStorage.getItem('pv_token'); } catch (e) {}
+let STATE = {profile: {}, reports: []};
+
+async function api(path, opts = {}) {
+  const o = {...opts, headers: {...(opts.headers || {})}};
+  if (TOKEN) o.headers['X-Patient-Token'] = TOKEN;
+  if (o.body && !(o.body instanceof FormData)) { o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(o.body); }
+  const r = await fetch(path, o);
+  if (!r.ok) {
+    let m = r.statusText; try { const j = await r.json(); m = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch (e) {}
+    if (r.status === 401) { try { localStorage.removeItem('pv_token'); } catch (e) {} TOKEN = null; boot(); }
+    throw new Error(m);
+  }
+  return r.json();
+}
+function busy(btn, on, label) { btn.disabled = on; if (on) { btn._t = btn.textContent; btn.innerHTML = '<span class="spinner"></span>' + (label || 'Working'); } else btn.textContent = btn._t || btn.textContent; }
+function when(t) { return new Date(t * 1000).toLocaleString(); }
+const lines = id => $(id).value.split('\n').map(x => x.trim()).filter(Boolean);
+
+// ---------- boot
+async function boot() {
+  const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
+  $('#modelinfo').textContent = cfg.mock ? 'Mock mode (no AI calls)' : '';
+  if (cfg.retention_hours) $('#demo').textContent = `Demo with synthetic data only. Please do not upload real health information. Demo data is deleted after ${cfg.retention_hours} hours.`;
+  if (!TOKEN) { $('#landing').classList.remove('hidden'); $('#app').classList.add('hidden'); return; }
+  $('#landing').classList.add('hidden'); $('#app').classList.remove('hidden');
+  await refresh(); loadSamples();
+  if (location.hash) showTab(location.hash.slice(1));
+}
+async function start(sample) {
+  const r = await api('/api/patients' + (sample ? '?sample=true' : ''), {method: 'POST'});
+  TOKEN = r.token; try { localStorage.setItem('pv_token', TOKEN); } catch (e) {}
+  boot();
+}
+$('#startSample').onclick = () => start(true);
+$('#startEmpty').onclick = () => start(false);
+
+async function refresh() {
+  STATE = await api('/api/me');
+  const p = STATE.profile;
+  $('#p_name').value = p.name; $('#p_dob').value = p.dob; $('#p_concern').value = p.todays_concern;
+  $('#p_allergies').value = p.allergies.join('\n'); $('#p_meds').value = p.medications.join('\n');
+  $('#p_conditions').value = p.conditions.join('\n'); $('#p_notes').value = p.notes;
+  renderReports(); renderShareForm(); renderProgress(); loadShares(); loadLog();
+}
+
+// ---------- welcome + next step
+let SHARES = [];
+function renderProgress() {
+  const p = STATE.profile, reps = STATE.reports;
+  const drafts = reps.filter(r => r.status === 'draft').length, confirmed = reps.length - drafts;
+  const active = SHARES.filter(s => s.state === 'active').length;
+  const profileDone = !!(p.name && (p.todays_concern || p.allergies.length || p.medications.length || p.conditions.length));
+  const steps = [
+    {tab: 'profile', done: profileDone, t: 'Fill in your profile', d: profileDone ? 'Done' : 'A few minutes, once'},
+    {tab: 'reports', done: confirmed > 0 && !drafts, t: 'Add and check reports',
+     d: drafts ? `${drafts} waiting for your check` : confirmed ? `${confirmed} checked` : 'Photo or PDF'},
+    {tab: 'share', done: active > 0, t: 'Share with your doctor', d: active ? `${active} active link${active > 1 ? 's' : ''}` : 'An expiring link'},
+  ];
+  const next = steps.find(s => !s.done);
+  const first = (p.name || '').replace(/\(.*?\)/g, '').trim().split(/\s+/)[0];
+  $('#helloName').textContent = first ? `Hi ${first}` : 'Welcome';
+  $('#helloSub').textContent = next ? `Next: ${next.t.toLowerCase()}.` : "You're ready for your visit.";
+  $('#progress').innerHTML = steps.map((s, i) => `<li class="${s.done ? 'done' : s === next ? 'next' : ''}" onclick="showTab('${s.tab}')">
+    <span class="n">${s.done ? '✓' : i + 1}</span><div><b>${s.t}</b><span>${s.d}</span></div></li>`).join('');
+  $('#draftCount').textContent = drafts; $('#draftCount').classList.toggle('hidden', !drafts);
+}
+
+// ---------- tabs
+function showTab(name) {
+  const b = document.querySelector(`#tabs button[data-tab="${name}"]`) || document.querySelector('#tabs button');
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
+  ['profile', 'reports', 'share', 'log'].forEach(t => $('#tab-' + t).classList.toggle('hidden', t !== b.dataset.tab));
+  if (b.dataset.tab === 'share') { renderShareForm(); loadShares(); }
+  if (b.dataset.tab === 'log') loadLog();
+}
+document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { history.replaceState(null, '', '#' + b.dataset.tab); showTab(b.dataset.tab); });
+
+// ---------- profile
+$('#saveProfile').onclick = async () => {
+  const btn = $('#saveProfile'); busy(btn, true, 'Saving');
+  try {
+    const r = await api('/api/me/profile', {method: 'PUT', body: {
+      name: $('#p_name').value, dob: $('#p_dob').value, todays_concern: $('#p_concern').value, notes: $('#p_notes').value,
+      allergies: lines('#p_allergies'), medications: lines('#p_meds'), conditions: lines('#p_conditions')}});
+    const e = $('#emergency'); e.classList.toggle('hidden', !r.emergency_warning); e.textContent = r.emergency_warning || '';
+    $('#saved').textContent = 'Saved'; setTimeout(() => $('#saved').textContent = '', 2000);
+    await refresh();
+  } catch (err) { $('#saved').textContent = err.message; }
+  busy(btn, false);
+};
+
+// ---------- reports
+async function loadSamples() {
+  try {
+    const names = await fetch('/api/samples').then(r => r.json());
+    $('#samples').innerHTML = names.map(n => `<button class="btn ghost" data-s="${esc(n)}">${esc(n.replace('sample_', '').replace('.png', '').replace(/_/g, ' '))}</button>`).join('');
+    $('#samples').querySelectorAll('button').forEach(b => b.onclick = () => submitReport(b, () => api('/api/me/reports/sample', {method: 'POST', body: {name: b.dataset.s}})));
+  } catch (e) {}
+}
+async function submitReport(btn, fn) {
+  $('#reportMsg').innerHTML = ''; busy(btn, true, 'Reading');
+  try { await fn(); await refresh(); }
+  catch (e) { $('#reportMsg').innerHTML = `<div class="alert bad">${esc(e.message)}</div>`; }
+  busy(btn, false);
+}
+$('#upload').onclick = () => {
+  const f = $('#file').files[0]; if (!f) { $('#reportMsg').innerHTML = '<div class="alert warn">Choose a file first.</div>'; return; }
+  const fd = new FormData(); fd.append('file', f);
+  submitReport($('#upload'), () => api('/api/me/reports', {method: 'POST', body: fd}));
+};
+$('#file').onchange = () => { const f = $('#file').files[0]; $('#dropName').textContent = f ? f.name : 'Drop a photo or PDF of a report here'; $('#drop').classList.toggle('has', !!f); };
+['dragenter', 'dragover'].forEach(ev => $('#drop').addEventListener(ev, e => { e.preventDefault(); $('#drop').classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => $('#drop').addEventListener(ev, e => { e.preventDefault(); $('#drop').classList.remove('over'); }));
+$('#drop').addEventListener('drop', e => { if (e.dataTransfer.files.length) { $('#file').files = e.dataTransfer.files; $('#file').onchange(); } });
+$('#pasteBtn').onclick = () => submitReport($('#pasteBtn'), () => api('/api/me/reports/text', {method: 'POST', body: {text: $('#pasted').value}}));
+
+const FIELDS = {
+  medications: ['name', 'dose', 'frequency'], allergies: ['substance', 'reaction'], conditions: ['name'],
+  lab_results: ['test', 'value', 'unit', 'reference_range', 'flag']
+};
+const TITLES = {medications: 'Medications', allergies: 'Allergies', conditions: 'Conditions', lab_results: 'Lab results'};
+const LABELS = {name: 'Name', dose: 'Dose', frequency: 'How often', substance: 'Allergic to', reaction: 'Reaction',
+  test: 'Test', value: 'Result', unit: 'Unit', reference_range: 'Normal range', flag: 'Flag'};
+const TYPE = {lab: 'Lab report', prescription: 'Prescription', discharge: 'Discharge summary', imaging: 'Imaging report', other: 'Report'};
+
+function rowHtml(key, item) {
+  return `<div class="ex-row" data-key="${key}">` + FIELDS[key].map(f => f === 'flag'
+    ? `<select data-f="flag" class="flag-${esc(item.flag || 'none')}" onchange="this.className='flag-'+(this.value||'none')">` +
+      ['', 'high', 'low', 'normal'].map(v => `<option value="${v}" ${(item.flag || '') === v ? 'selected' : ''}>${v ? v[0].toUpperCase() + v.slice(1) : '–'}</option>`).join('') + '</select>'
+    : `<input type="text" data-f="${f}" placeholder="${LABELS[f]}" aria-label="${LABELS[f]}" value="${esc(item[f] ?? '')}">`).join('') +
+    `<button title="Remove this line" onclick="this.parentElement.remove()">×</button></div>`;
+}
+const headRow = key => `<div class="ex-row ex-head" data-key="${key}">${FIELDS[key].map(f => `<span>${LABELS[f]}</span>`).join('')}<span></span></div>`;
+function reportCard(r) {
+  const ex = r.extracted || {};
+  const meta = [ex.provider, ex.report_date].filter(Boolean).map(m => `<span class="chip">${esc(m)}</span>`).join('');
+  let h = `<div class="item" id="rep_${r.id}"><div class="row item-head"><strong>${TYPE[ex.report_type] || 'Report'}</strong>
+     <span class="pill ${r.status}">${r.status === 'draft' ? 'Needs your check' : 'Checked'}</span>
+     <span class="chips">${meta}</span><span class="hint fname">${esc(r.filename)}</span></div>`;
+  h += `<div class="review"><div>`;
+  if (r.has_file && r.mime.startsWith('image/')) h += `<img alt="original" src="/api/me/reports/${r.id}/file?t=${encodeURIComponent(TOKEN)}">`;
+  else h += `<div class="hint">Original: ${esc(r.mime)}</div>`;
+  h += `</div><div>`;
+  if (r.status === 'draft') {
+    h += `<div class="alert warn">Please compare each line with your report. Fix or remove anything that looks wrong, then confirm.</div>`;
+    const empty = [];
+    for (const key of Object.keys(FIELDS)) {
+      const items = ex[key] || [];
+      if (!items.length) { empty.push(TITLES[key].toLowerCase()); h += `<div data-list="${key}"></div>`; continue; }
+      h += `<h3>${TITLES[key]}</h3><div data-list="${key}">${headRow(key)}${items.map(i => rowHtml(key, i)).join('')}</div>`;
+    }
+    if (empty.length) h += `<p class="hint">Nothing found for ${empty.join(', ')}.</p>`;
+    h += `<label style="font-weight:400"><input type="checkbox" class="addp" checked> Add medications, allergies and conditions to my profile</label>
+      <div class="row" style="margin-top:8px"><button class="btn" onclick="confirmReport('${r.id}', this)">Looks right, save it</button>
+      <button class="btn ghost" onclick="delReport('${r.id}')">Discard</button></div>`;
+  } else {
+    for (const key of Object.keys(FIELDS)) {
+      const items = ex[key] || []; if (!items.length) continue;
+      h += `<h3>${TITLES[key]}</h3><table>` + items.map(i => '<tr>' + FIELDS[key].map(f =>
+        `<td class="${f === 'flag' && (i[f] === 'high' || i[f] === 'low') ? 'flag-' + i[f] : ''}">${esc(i[f] ?? '')}</td>`).join('') + '</tr>').join('') + '</table>';
+    }
+    h += `<div class="row" style="margin-top:8px"><button class="btn ghost" onclick="delReport('${r.id}')">Delete</button></div>`;
+  }
+  return h + `</div></div></div>`;
+}
+function renderReports() { $('#reportList').innerHTML = STATE.reports.map(reportCard).join('') || '<p class="hint">No reports yet.</p>'; }
+window.confirmReport = async (id, btn) => {
+  const card = $('#rep_' + id), ex = {};
+  const orig = STATE.reports.find(r => r.id === id).extracted;
+  ['report_type', 'report_date', 'provider', 'key_notes'].forEach(k => ex[k] = orig[k]);
+  for (const key of Object.keys(FIELDS)) {
+    ex[key] = [...card.querySelectorAll(`[data-list="${key}"] .ex-row:not(.ex-head)`)].map(row => {
+      const o = {}; row.querySelectorAll('input,select').forEach(i => o[i.dataset.f] = i.value.trim() || null);
+      const src = (orig[key] || []).find(x => FIELDS[key].every(f => (x[f] ?? null) === (o[f] ?? null)));
+      if (src && src.source_quote) o.source_quote = src.source_quote;
+      return o;
+    }).filter(o => Object.values(o).some(v => v));
+  }
+  busy(btn, true, 'Saving');
+  try { await api(`/api/me/reports/${id}/confirm`, {method: 'PUT', body: {extracted: ex, add_to_profile: card.querySelector('.addp').checked}}); await refresh(); }
+  catch (e) { $('#reportMsg').innerHTML = `<div class="alert bad">${esc(e.message)}</div>`; busy(btn, false); }
+};
+window.delReport = async id => { await api('/api/me/reports/' + id, {method: 'DELETE'}); refresh(); };
+
+// ---------- share
+const SEC = {todays_concern: "Today's concern", allergies: 'Allergies', medications: 'Medications', conditions: 'Conditions / history', reports: 'Reports', notes: 'Private notes'};
+function renderShareForm() {
+  const keep = new Set([...document.querySelectorAll('#s_sections input:checked')].map(i => i.value));
+  const first = !$('#s_sections').children.length;
+  $('#s_sections').innerHTML = Object.entries(SEC).map(([k, v]) =>
+    `<label style="font-weight:400;margin:4px 0"><input type="checkbox" value="${k}" ${(first ? k !== 'notes' : keep.has(k)) ? 'checked' : ''}> ${v}</label>`).join('');
+  $('#s_sections input[value=reports]').onchange = toggleReports;
+  $('#s_sections').querySelectorAll('input').forEach(i => i.onchange = toggleReports);
+  const conf = STATE.reports.filter(r => r.status === 'confirmed');
+  $('#s_reportlist').innerHTML = conf.map(r => `<label style="font-weight:400;margin:4px 0"><input type="checkbox" value="${r.id}" checked> ${TYPE[r.extracted?.report_type] || 'Report'}${r.extracted?.report_date ? ' · ' + esc(r.extracted.report_date) : ''}</label>`).join('') || '<span class="hint">No confirmed reports yet.</span>';
+  toggleReports();
+}
+function toggleReports() { $('#s_reports').classList.toggle('hidden', !$('#s_sections input[value=reports]').checked); }
+$('#makeShare').onclick = async () => {
+  const btn = $('#makeShare'); busy(btn, true, 'Creating');
+  try {
+    const r = await api('/api/me/shares', {method: 'POST', body: {
+      doctor_name: $('#s_doctor').value, expires_minutes: +$('#s_expiry').value,
+      sections: [...document.querySelectorAll('#s_sections input:checked')].map(i => i.value),
+      report_ids: [...document.querySelectorAll('#s_reportlist input:checked')].map(i => i.value)}});
+    const url = location.origin + '/doctor?token=' + r.token;
+    $('#shareMsg').innerHTML = `<div class="alert ok">Link created. Send it to your doctor.<div class="linkbox"><input type="text" readonly value="${esc(url)}" onclick="this.select()"><button class="btn" onclick="navigator.clipboard.writeText('${esc(url)}')">Copy</button></div>
+      <a href="${esc(url)}" target="_blank">Open the doctor's view</a></div>`;
+    loadShares();
+  } catch (e) { $('#shareMsg').innerHTML = `<div class="alert bad">${esc(e.message)}</div>`; }
+  busy(btn, false);
+};
+async function loadShares() {
+  const list = SHARES = await api('/api/me/shares');
+  renderProgress();
+  $('#shareList').innerHTML = list.map(s => `<div class="item"><div class="row"><strong>${esc(s.doctor_name)}</strong>
+    <span class="pill ${s.state}">${s.state}</span><span class="hint">${s.state === 'active' ? 'until ' : 'ended '}${when(s.expires_at)}</span></div>
+    <div class="hint">${s.sections.map(x => SEC[x]).join(', ')}</div>
+    <div class="row" style="margin-top:10px">${s.state === 'active' ? `<a class="btn-link" href="/doctor?token=${esc(s.token)}" target="_blank">Open doctor's view ↗</a>
+    <button class="btn danger sm" onclick="revoke('${s.id}')">Revoke access</button>` : ''}</div></div>`).join('') || '<p class="hint">No links yet.</p>';
+}
+window.revoke = async id => { await api(`/api/me/shares/${id}/revoke`, {method: 'POST'}); loadShares(); loadLog(); };
+
+// ---------- log
+async function loadLog() {
+  const rows = await api('/api/me/access-log');
+  $('#logList').innerHTML = rows.length ? '<ul class="timeline">' +
+    rows.map(r => `<li><span class="dot${r.action.startsWith('Viewed') ? ' doc' : ''}"></span><div><b>${esc(r.action)}</b>
+      <span class="hint">${esc(r.doctor_name)} · device …${esc(r.device)}</span></div><time>${when(r.at)}</time></li>`).join('') + '</ul>'
+    : '<div class="empty">Nobody has opened your record yet. When a doctor does, it shows up here.</div>';
+}
+
+boot();
+</script>
+</body>
+</html>

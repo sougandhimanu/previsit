@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PreVisit - Doctor view</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header><div class="in"><h1><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>PreVisit <span class="tag">Doctor view</span></h1><small>Patient-shared record</small></div></header>
+<main id="main"><div class="card"><span class="spinner"></span>Loading shared record…</div></main>
+<script>
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const token = new URLSearchParams(location.search).get('token');
+const main = document.getElementById('main');
+const TYPE = {lab: 'Lab report', prescription: 'Prescription', discharge: 'Discharge summary', imaging: 'Imaging report', other: 'Report'};
+const fmtDate = s => { const d = new Date(s + 'T00:00'); return s && !isNaN(d) ? d.toLocaleDateString([], {day: 'numeric', month: 'short', year: 'numeric'}) : (s || ''); };
+function age(dob) {
+  const d = new Date(dob + 'T00:00'), n = new Date(); if (!dob || isNaN(d)) return '';
+  return n.getFullYear() - d.getFullYear() - (n < new Date(n.getFullYear(), d.getMonth(), d.getDate()) ? 1 : 0);
+}
+const isAbn = l => l.flag === 'high' || l.flag === 'low';
+const flagChip = f => isAbn({flag: f}) ? `<span class="flag ${f}">${f === 'high' ? '↑ High' : '↓ Low'}</span>` : `<span class="hint">${esc(f || '')}</span>`;
+
+// At-a-glance tile: "Not shared" when the patient left the section out, "None recorded" when shared but empty.
+function tile(title, shared, items, cls = '') {
+  const body = !shared ? '<p class="none">Not shared</p>'
+    : items.length ? '<ul>' + items.join('') + '</ul>' : '<p class="none">None recorded</p>';
+  return `<div class="tile ${shared && items.length ? cls : ''}"><h4>${title}</h4>${body}</div>`;
+}
+
+// The brief comes back as blocks separated by blank lines: a heading line, then text or "- " bullet lines.
+function briefHtml(text) {
+  const blocks = String(text || '').split(/\n\s*\n/).map(b => b.split('\n').map(l => l.trim()).filter(Boolean)).filter(b => b.length);
+  if (blocks.some(b => b.length < 2)) return `<div class="summary">${esc(text)}</div>`;
+  return '<div class="brief">' + blocks.map(([head, ...rest], i) => {
+    const bullets = rest.every(l => l.startsWith('- '));
+    const body = rest.length === 1 && /^not shared$/i.test(rest[0]) ? '<p class="none">Not shared</p>'
+      : bullets ? '<ul>' + rest.map(l => `<li>${esc(l.slice(2))}</li>`).join('') + '</ul>'
+      : '<p>' + rest.map(esc).join('<br>') + '</p>';
+    return `<div class="bblock${i === 0 ? ' wide' : ''}"><h4>${esc(head)}</h4>${body}</div>`;
+  }).join('') + '</div>';
+}
+
+function reportHtml(r) {
+  const meta = [r.provider, fmtDate(r.report_date) || 'Date not stated'].filter(Boolean).map(m => `<span class="chip">${esc(m)}</span>`).join('');
+  let h = `<div class="card report"><div class="rep-head"><div><h2>${TYPE[r.report_type] || 'Report'}</h2><div class="meta">${meta}</div></div>`;
+  if (r.has_file) h += `<a class="btn-link no-print" href="/api/shared/${encodeURIComponent(token)}/report/${r.id}/file" target="_blank" title="Opening it is logged for the patient">View original ↗</a>`;
+  h += '</div>';
+  if (r.lab_results?.length) h += '<h3>Lab results</h3><table><tr><th>Test</th><th>Result</th><th>Normal range</th><th>Flag</th></tr>' +
+    r.lab_results.map(l => `<tr class="${isAbn(l) ? 'abn' : ''}"><td>${esc(l.test)}</td><td><b>${esc(l.value)}</b> ${esc(l.unit)}</td><td>${esc(l.reference_range)}</td><td>${flagChip(l.flag)}</td></tr>`).join('') + '</table>';
+  if (r.medications?.length) h += '<h3>Medications</h3><table>' + r.medications.map(m => `<tr><td><b>${esc(m.name)}</b></td><td>${esc(m.dose)}</td><td>${esc(m.frequency)}</td></tr>`).join('') + '</table>';
+  if (r.allergies?.length) h += '<h3>Allergies</h3><ul>' + r.allergies.map(a => `<li>${esc(a.substance)} ${a.reaction ? '(' + esc(a.reaction) + ')' : ''}</li>`).join('') + '</ul>';
+  if (r.conditions?.length) h += '<h3>Conditions</h3><ul>' + r.conditions.map(c => `<li>${esc(c.name)}</li>`).join('') + '</ul>';
+  if (r.key_notes?.length) h += '<h3>Notes in document</h3><ul>' + r.key_notes.map(n => `<li>${esc(n)}</li>`).join('') + '</ul>';
+  return h + '</div>';
+}
+
+(async () => {
+  if (!token) { main.innerHTML = '<div class="alert bad">No link token found. Ask the patient for their share link.</div>'; return; }
+  const res = await fetch('/api/shared/' + encodeURIComponent(token));
+  if (!res.ok) {
+    let m = 'This link is not available.'; try { m = (await res.json()).detail; } catch (e) {}
+    main.innerHTML = `<div class="alert bad">${esc(m)}</div>`; return;
+  }
+  const d = await res.json();
+  const p = d.profile;
+  const name = d.patient.name || 'Patient';
+  const initials = name.replace(/\(.*?\)/g, '').trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase() || 'P';
+  const has = s => d.sections.includes(s);
+  const a = age(d.patient.dob);
+  const abnormal = d.reports.flatMap(r => (r.lab_results || []).filter(isAbn).map(l =>
+    `<li><b>${esc(l.test)}</b> ${esc(l.value)} ${esc(l.unit)} <span class="flag ${l.flag}">${l.flag === 'high' ? '↑' : '↓'}</span>${r.report_date ? ` <span class="hint">${esc(fmtDate(r.report_date))}</span>` : ''}</li>`));
+  main.innerHTML =
+    `<div class="card"><div class="patient"><span class="avatar">${esc(initials)}</span><div class="grow">
+       <h2>${esc(name)}</h2>
+       <div class="meta">${a !== '' ? `<span class="chip strong">${a} years</span>` : ''}<span class="chip">Born ${esc(fmtDate(d.patient.dob) || 'not given')}</span><span class="chip">For ${esc(d.doctor_name)}</span>
+       <span class="chip">Link ends ${new Date(d.expires_at * 1000).toLocaleString([], {dateStyle: 'medium', timeStyle: 'short'})}</span></div></div>
+       <button class="btn ghost sm no-print" onclick="print()">Print</button></div>
+       ${has('todays_concern') && p.todays_concern ? `<blockquote class="concern"><span>In the patient's words</span>${esc(p.todays_concern)}</blockquote>` : ''}
+       <div class="glance">
+         ${tile('Allergies', has('allergies'), (p.allergies || []).map(x => `<li>${esc(x)}</li>`), 'alarm')}
+         ${tile('Current medications', has('medications'), (p.medications || []).map(x => `<li>${esc(x)}</li>`))}
+         ${tile('Out-of-range results', has('reports'), abnormal, 'attn')}
+       </div>
+       <p class="disclaimer">${esc(d.disclaimer)}</p></div>
+     <div class="card"><h2>Pre-visit brief <span class="ai-tag">Written by Nemotron from shared data</span></h2>${d.summary_note ? `<div class="alert warn">${esc(d.summary_note)}</div>` : ''}
+       ${briefHtml(d.summary)}</div>` +
+    (has('conditions') || p.notes ? `<div class="card"><h2>History</h2><div class="cols">` +
+      (has('conditions') ? `<div><h3>Conditions / past history</h3>${p.conditions?.length ? '<ul>' + p.conditions.map(c => `<li>${esc(c)}</li>`).join('') + '</ul>' : '<p class="hint">None recorded</p>'}</div>` : '') +
+      (p.notes ? `<div><h3>Patient notes</h3><p style="white-space:pre-wrap;margin:0">${esc(p.notes)}</p></div>` : '') + '</div></div>' : '') +
+    d.reports.map(reportHtml).join('');
+})();
+</script>
+</body>
+</html>
