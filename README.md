@@ -7,6 +7,9 @@ can switch it off at any time, and sees every time it is opened.
 
 Built for the Nebius x NVIDIA Global AI Hackathon, **Best Apps and Agents** track.
 
+**Live demo:** https://previsit-1oqp.onrender.com (click **Try with a sample patient**; the first visit may take
+up to a minute while the server wakes)
+
 > **Demo only.** Use synthetic data. This is not a medical device, gives no diagnosis or treatment advice,
 > and has no real authentication or compliance certification (HIPAA etc.).
 
@@ -25,16 +28,37 @@ Built for the Nebius x NVIDIA Global AI Hackathon, **Best Apps and Agents** trac
 
 ## How Nemotron and Nebius are used
 
-| Step | Call | Model |
+| Step | Model on Token Factory | Why this model |
 |---|---|---|
-| Read a report photo | Token Factory `chat.completions` with an image | Nemotron vision (VL) model |
-| Read PDF / pasted text | Token Factory `chat.completions` | Nemotron text model |
-| Doctor's pre-visit brief | Token Factory `chat.completions` | Nemotron text model |
+| Read a report photo | **Nemotron 3.5 Super VL** (`nvidia/Nemotron-3.5-Super-VL`) | The Nemotron model that reads images and has a public pay-per-token endpoint. Reads tables of lab values from a photo. |
+| Read PDF / pasted text | **Nemotron 3 Nano 30B A3B** (`nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`) | Copying facts into a fixed schema needs accuracy, not deep reasoning. Nano is the cheapest Nemotron ($0.06 / $0.24 per 1M tokens), about 5x cheaper than Super. |
+| Doctor's pre-visit brief | **Nemotron 3 Nano 30B A3B** | Short, structured summary of already-checked data. Fast and cheap. |
 
-All calls go to `https://api.tokenfactory.nebius.com/v1/` through the OpenAI-compatible API. Exact model IDs
-are discovered at runtime from the catalog (`GET /v1/models`), or pinned with `TEXT_MODEL` / `VISION_MODEL`.
-Temperature is 0, and invalid JSON triggers one automatic retry.
-Token Factory let us swap and compare Nemotron sizes without managing GPUs (see feedback in the submission).
+Measured on the three sample reports and one pasted report (thinking off, see below):
+
+| Call | Model | Time | Output tokens |
+|---|---|---|---|
+| Lab report photo | Super VL | 2.4 s | 542 |
+| Prescription photo | Super VL | 1.3 s | 317 |
+| Discharge summary photo | Super VL | 1.1 s | 206 |
+| Pasted report text | Nano | 2.0 s | 458 |
+| Doctor's brief | Nano | 1.0 s | 226 |
+
+How the calls are set up (`app/llm.py`):
+
+- All calls go to `https://api.tokenfactory.nebius.com/v1/` with the standard OpenAI Python SDK, because
+  Token Factory is OpenAI-compatible. Switching models is a config change, not a code change.
+- **Thinking is turned off** (`chat_template_kwargs: {"enable_thinking": false}`). With reasoning on, both
+  models spent the whole token budget on hidden reasoning and returned cut-off JSON on 3 of 4 reports. Off,
+  answers were 3-5x shorter and every report parsed. (`reasoning_effort` and a `/no_think` system prompt had no
+  effect in our tests.)
+- Temperature 0, a strict JSON schema with a `source_quote` per item, and one automatic retry on invalid JSON.
+- Every call logs its token use (`used / max_tokens`) and warns when an answer is cut off, so limits are set
+  from real numbers.
+- Model IDs are pinned with `TEXT_MODEL` / `VISION_MODEL`. If unset, the app picks Nemotron models from the
+  live catalog (`GET /v1/models`).
+
+Token Factory let us compare Nemotron sizes and variants behind one key, with no GPUs to manage.
 
 ## Safety choices
 
@@ -48,18 +72,47 @@ Token Factory let us swap and compare Nemotron sizes without managing GPUs (see 
 
 ## Run it
 
+Needs Python 3.12 and a [Nebius Token Factory](https://tokenfactory.nebius.com) API key.
+
+**1. Install**
+
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env            # then paste your Token Factory key into .env
-python check_models.py --probe  # lists Nemotron models and which accept images
+```
+
+**2. Create a file named `.env`** in the project folder (it is git-ignored, never commit it):
+
+```
+NEBIUS_API_KEY=your-token-factory-key
+TEXT_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B
+VISION_MODEL=nvidia/Nemotron-3.5-Super-VL
+MOCK_LLM=0
+DAILY_LLM_CALLS_PER_IP=25
+DEMO_RETENTION_HOURS=48
+```
+
+| Variable | Meaning |
+|---|---|
+| `NEBIUS_API_KEY` | Your Token Factory key |
+| `TEXT_MODEL`, `VISION_MODEL` | Model IDs to use. Leave empty to pick Nemotron models from the catalog automatically. |
+| `MOCK_LLM` | `1` runs the whole app with rule-based fake extraction and no AI calls (no key needed) |
+| `DAILY_LLM_CALLS_PER_IP` | AI calls each visitor may make per day, to protect credits |
+| `DEMO_RETENTION_HOURS` | Demo data older than this is deleted |
+| `DATA_DIR` | Optional. Where the database and uploads are stored (default `data/`) |
+
+**3. Check your models and run**
+
+```bash
+python check_models.py --probe   # lists Nemotron models your key can use and which accept images
 uvicorn app.main:app --port 8000
 ```
 
 Open http://localhost:8000 and click **Try with a sample patient**. Three synthetic reports can be read with
 one click on the Reports tab (regenerate them with `python gen_samples.py`).
 
-No key yet? `MOCK_LLM=1 uvicorn app.main:app` runs the whole UI with rule-based fake extraction.
+No key yet? Set `MOCK_LLM=1` in `.env` to run the whole UI with rule-based fake extraction.
 Run `python smoke_test.py` to check the full flow (profile, upload, confirm, share, privacy, expiry, revoke,
 access log, rate cap) without any network.
 
@@ -68,10 +121,16 @@ report text instead, or set `VISION_MODEL` to a vision-capable Nemotron model.
 
 ### Deploy for judges
 
-Judges must be able to use the demo for free until Dec 15, 2026. Any host that runs a Python web process works
-(Render, Fly.io, Railway, a small VM). Set `NEBIUS_API_KEY` as a secret environment variable, start command
-`uvicorn app.main:app --host 0.0.0.0 --port $PORT`, and attach a small persistent disk for `data/` (or accept
-that demo data resets on restart). Keep `DAILY_LLM_CALLS_PER_IP` low to protect credits.
+The live demo runs on [Render](https://render.com) as a Python web service. Any host that runs a Python web
+process works (Railway, Fly.io, a small VM).
+
+| Setting | Value |
+|---|---|
+| Build command | `pip install -r requirements.txt` |
+| Start command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| Health check path | `/healthz` |
+| Environment variables | The `.env` values above as secrets, plus `PYTHON_VERSION=3.12.7` |
+| Persistent data (optional) | Attach a small disk at `/var/data` and set `DATA_DIR=/var/data`. Without one, demo data resets on restart. |
 
 ## Project layout
 

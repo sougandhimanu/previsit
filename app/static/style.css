@@ -317,3 +317,5 @@ tr.abn td{background:color-mix(in srgb,var(--badbg) 60%,transparent)}
 .review{grid-template-columns:minmax(0,.8fr) minmax(0,1.6fr)}
 @media(max-width:760px){.review{grid-template-columns:1fr}}
 .ex-row[data-key=lab_results]{grid-template-columns:minmax(0,1.5fr) minmax(52px,.7fr) minmax(66px,.8fr) minmax(0,.9fr) minmax(92px,.9fr) 32px}
+header h1 a.home{display:flex;align-items:center;gap:10px;color:inherit;text-decoration:none}
+header h1 a.home:hover .mark{filter:brightness(1.1)}

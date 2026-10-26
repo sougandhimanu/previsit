@@ -17,7 +17,7 @@ from PIL import Image, ImageDraw
 load_dotenv()
 key = os.getenv("NEBIUS_API_KEY", "").strip()
 if not key:
-    sys.exit("NEBIUS_API_KEY is missing. Copy .env.example to .env and paste your key.")
+    sys.exit("NEBIUS_API_KEY is missing. Create a .env file with your key (see README).")
 
 client = OpenAI(base_url=os.getenv("NEBIUS_BASE_URL", "https://api.tokenfactory.nebius.com/v1/"), api_key=key)
 ids = sorted(m.id for m in client.models.list().data)

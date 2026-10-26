@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<header><div class="in"><h1><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>PreVisit</h1><small id="modelinfo"></small></div></header>
+<header><div class="in"><h1><a class="home" href="#home" title="PreVisit home"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>PreVisit</a></h1><small id="modelinfo"></small></div></header>
 <div class="demo" id="demo">Demo with synthetic data only. Please do not upload real health information. Demo data is deleted automatically.</div>
 
 <main>
@@ -20,9 +20,11 @@
       <h2>Fill your history once. <em>Share only what you choose.</em></h2>
       <p class="sub">Photograph a paper report, let AI turn it into a clean summary, review it, and send your doctor an expiring link before you arrive. You can see every time it is opened and revoke it any time.</p>
       <div class="row">
+        <button class="btn hidden" id="continueBtn">Continue to my record</button>
         <button class="btn" id="startSample">Try with a sample patient</button>
         <button class="btn ghost" id="startEmpty">Start with an empty profile</button>
       </div>
+      <p class="hint hidden" id="restartHint" style="margin-top:10px">Starting again creates a new record and replaces the one saved in this browser.</p>
     </div>
     <div class="preview" aria-hidden="true">
       <span class="badge-exp">Expires in 4h</span>
@@ -142,7 +144,7 @@ async function api(path, opts = {}) {
   const r = await fetch(path, o);
   if (!r.ok) {
     let m = r.statusText; try { const j = await r.json(); m = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch (e) {}
-    if (r.status === 401) { try { localStorage.removeItem('pv_token'); } catch (e) {} TOKEN = null; boot(); }
+    if (r.status === 401) { try { localStorage.removeItem('pv_token'); } catch (e) {} TOKEN = null; route(); }
     throw new Error(m);
   }
   return r.json();
@@ -156,18 +158,31 @@ async function boot() {
   const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
   $('#modelinfo').textContent = cfg.mock ? 'Mock mode (no AI calls)' : '';
   if (cfg.retention_hours) $('#demo').textContent = `Demo with synthetic data only. Please do not upload real health information. Demo data is deleted after ${cfg.retention_hours} hours.`;
-  if (!TOKEN) { $('#landing').classList.remove('hidden'); $('#app').classList.add('hidden'); return; }
-  $('#landing').classList.add('hidden'); $('#app').classList.remove('hidden');
+  route();
+}
+// Landing lives at #home (or no token); the app at #profile, #reports, ... so Back and the logo return home.
+async function route() {
+  if (TOKEN && !location.hash) history.replaceState(null, '', '#profile');  // so Back from home returns here
+  const home = !TOKEN || location.hash === '#home';
+  $('#landing').classList.toggle('hidden', !home); $('#app').classList.toggle('hidden', home);
+  $('#continueBtn').classList.toggle('hidden', !TOKEN); $('#restartHint').classList.toggle('hidden', !TOKEN);
+  $('#startSample').classList.toggle('ghost', !!TOKEN);
+  if (home) { scrollTo(0, 0); return; }
   await refresh(); loadSamples();
   if (location.hash) showTab(location.hash.slice(1));
 }
+addEventListener('hashchange', () => {
+  if (!location.hash) history.replaceState(null, '', '#home');  // Back to the first page = home, not the app
+  if (!TOKEN || location.hash === '#home' || $('#app').classList.contains('hidden')) route();
+});
 async function start(sample) {
   const r = await api('/api/patients' + (sample ? '?sample=true' : ''), {method: 'POST'});
   TOKEN = r.token; try { localStorage.setItem('pv_token', TOKEN); } catch (e) {}
-  boot();
+  location.hash = '#profile';
 }
 $('#startSample').onclick = () => start(true);
 $('#startEmpty').onclick = () => start(false);
+$('#continueBtn').onclick = () => { location.hash = '#profile'; };
 
 async function refresh() {
   STATE = await api('/api/me');
@@ -211,18 +226,30 @@ function showTab(name) {
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { history.replaceState(null, '', '#' + b.dataset.tab); showTab(b.dataset.tab); });
 
 // ---------- profile
+const profileBody = () => ({
+  name: $('#p_name').value, dob: $('#p_dob').value, todays_concern: $('#p_concern').value, notes: $('#p_notes').value,
+  allergies: lines('#p_allergies'), medications: lines('#p_meds'), conditions: lines('#p_conditions')});
+async function saveProfile(opts = {}) {
+  clearTimeout(saveProfile.t); saveProfile.dirty = false;
+  const body = profileBody();
+  const r = await api('/api/me/profile', {method: 'PUT', body, ...opts});
+  const e = $('#emergency'); e.classList.toggle('hidden', !r.emergency_warning); e.textContent = r.emergency_warning || '';
+  STATE.profile = {...STATE.profile, ...body}; renderProgress();
+  return r;
+}
 $('#saveProfile').onclick = async () => {
   const btn = $('#saveProfile'); busy(btn, true, 'Saving');
-  try {
-    const r = await api('/api/me/profile', {method: 'PUT', body: {
-      name: $('#p_name').value, dob: $('#p_dob').value, todays_concern: $('#p_concern').value, notes: $('#p_notes').value,
-      allergies: lines('#p_allergies'), medications: lines('#p_meds'), conditions: lines('#p_conditions')}});
-    const e = $('#emergency'); e.classList.toggle('hidden', !r.emergency_warning); e.textContent = r.emergency_warning || '';
-    $('#saved').textContent = 'Saved'; setTimeout(() => $('#saved').textContent = '', 2000);
-    await refresh();
-  } catch (err) { $('#saved').textContent = err.message; }
+  try { await saveProfile(); $('#saved').textContent = 'Saved'; setTimeout(() => $('#saved').textContent = '', 2000); await refresh(); }
+  catch (err) { $('#saved').textContent = err.message; }
   busy(btn, false);
 };
+// Autosave a moment after typing stops, and flush on refresh/close, so nothing typed is lost.
+document.querySelectorAll('#tab-profile input, #tab-profile textarea').forEach(el => el.addEventListener('input', () => {
+  saveProfile.dirty = true; $('#saved').textContent = 'Saving…';
+  clearTimeout(saveProfile.t);
+  saveProfile.t = setTimeout(() => saveProfile().then(() => $('#saved').textContent = 'All changes saved', e => $('#saved').textContent = e.message), 900);
+}));
+addEventListener('pagehide', () => { if (saveProfile.dirty && TOKEN) saveProfile({keepalive: true}).catch(() => {}); });
 
 // ---------- reports
 async function loadSamples() {
