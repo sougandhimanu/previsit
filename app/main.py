@@ -103,6 +103,22 @@ def _med_line(m: dict) -> str:
     return " ".join(x for x in [m.get("name"), m.get("dose"), m.get("frequency")] if x).strip()
 
 
+def _merge_meds(existing: List[str], meds: List[dict]) -> List[str]:
+    """Same medicine and dose counts as one entry; keep the more detailed wording."""
+    out = list(existing)
+    for m in meds:
+        line = _med_line(m)
+        key = " ".join(x for x in [m.get("name"), m.get("dose")] if x).strip().lower()
+        if not line:
+            continue
+        hit = next((i for i, e in enumerate(out) if key and e.strip().lower().startswith(key)), None)
+        if hit is None:
+            out = _dedupe_add(out, [line])
+        elif len(line) > len(out[hit]):
+            out[hit] = line
+    return out
+
+
 # ---------------------------------------------------------------- models
 class ProfileIn(BaseModel):
     name: str = Field("", max_length=120)
@@ -269,7 +285,7 @@ def confirm_report(rid: str, body: ConfirmIn, x_patient_token: Optional[str] = H
     db.run("UPDATE reports SET extracted=?, status='confirmed' WHERE id=?", (json.dumps(ex), rid))
     if body.add_to_profile:
         p = json.loads(row["profile"] or "{}")
-        p["medications"] = _dedupe_add(p.get("medications", []), [_med_line(m) for m in ex["medications"]])
+        p["medications"] = _merge_meds(p.get("medications", []), ex["medications"])
         p["allergies"] = _dedupe_add(
             p.get("allergies", []),
             [f"{a.get('substance','')}" + (f" ({a['reaction']})" if a.get("reaction") else "") for a in ex["allergies"]],

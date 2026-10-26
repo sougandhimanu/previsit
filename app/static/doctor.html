@@ -31,13 +31,26 @@ function tile(title, shared, items, cls = '') {
   return `<div class="tile ${shared && items.length ? cls : ''}"><h4>${title}</h4>${body}</div>`;
 }
 
-// The brief comes back as blocks separated by blank lines: a heading line, then text or "- " bullet lines.
+// The brief is six known sections. Split on those headings wherever they appear (own line, "Heading:",
+// "HEADING: text", with or without blank lines) so a slightly different layout still renders as sections.
+const HEADS = ['Reason for visit', 'Key history', 'Medications', 'Allergies', 'Notable results', 'Things to confirm with the patient'];
 function briefHtml(text) {
-  const blocks = String(text || '').split(/\n\s*\n/).map(b => b.split('\n').map(l => l.trim()).filter(Boolean)).filter(b => b.length);
-  if (blocks.some(b => b.length < 2)) return `<div class="summary">${esc(text)}</div>`;
+  const blocks = [];
+  for (let line of String(text || '').split('\n')) {
+    line = line.trim().replace(/^[#*\s]+|\*+$/g, '');
+    if (!line) continue;
+    const h = HEADS.find(x => line.toLowerCase().startsWith(x.toLowerCase()) && /^\s*(:|$)/.test(line.slice(x.length)));
+    if (h) {
+      blocks.push([h]);
+      const rest = line.slice(h.length).replace(/^[:\s-]+/, '');
+      // "REASON FOR VISIT: FEELING TIRED" -> keep the text, but not shouted
+      if (rest) blocks[blocks.length - 1].push(rest === rest.toUpperCase() ? rest[0] + rest.slice(1).toLowerCase() : rest);
+    } else if (blocks.length) blocks[blocks.length - 1].push(line.replace(/^[•*]\s*/, '- '));
+  }
+  if (blocks.length < 3 || blocks.some(b => b.length < 2)) return `<div class="summary">${esc(text)}</div>`;
   return '<div class="brief">' + blocks.map(([head, ...rest], i) => {
     const bullets = rest.every(l => l.startsWith('- '));
-    const body = rest.length === 1 && /^not shared$/i.test(rest[0]) ? '<p class="none">Not shared</p>'
+    const body = rest.length === 1 && /^(- )?not shared$/i.test(rest[0]) ? '<p class="none">Not shared</p>'
       : bullets ? '<ul>' + rest.map(l => `<li>${esc(l.slice(2))}</li>`).join('') + '</ul>'
       : '<p>' + rest.map(esc).join('<br>') + '</p>';
     return `<div class="bblock${i === 0 ? ' wide' : ''}"><h4>${esc(head)}</h4>${body}</div>`;
